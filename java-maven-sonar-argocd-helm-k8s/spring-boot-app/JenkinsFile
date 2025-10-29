@@ -7,27 +7,30 @@ pipeline {
   }
 
   options {
-    // We still want to skip the initial, implicit checkout
     skipDefaultCheckout()
   }
 
   stages {
 
-    stage('Checkout') {
+    stage('Prepare Workspace') {
       steps {
-        // THE GUARANTEED FIX:
-        // Use a simple shell step to clone. This ensures 'git' runs
-        // INSIDE the container as the 'root' user.
-        sh 'git clone https://github.com/maqboolsubair181/Jenkins-Zero-To-Hero.git .'
+        // THE DEFINITIVE FIX:
+        // The Jenkinsfile checkout populates the directory as user 111.
+        // As root, we take ownership of all the files.
+        sh 'chown -R root:root .'
+
+        // Now, clean up and ensure we are on the latest commit from the main branch.
+        sh 'git clean -fdx'
+        sh 'git fetch origin'
+        sh 'git reset --hard origin/main'
         
-        sh 'echo "--- Files cloned by user `whoami` ---"'
+        sh 'echo "--- Workspace prepared and owned by `whoami` ---"'
         sh 'ls -la' // You will now see 'root root' as the owner of all files
       }
     }
 
     stage('Build and Test') {
       steps {
-        // The rest of the pipeline now works because the file ownership is correct
         dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
           sh 'mvn clean package -Dmaven.test.skip=true'
         }
@@ -71,7 +74,7 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # This will now succeed because the .git directory is owned by root.
+            # This will now succeed because root owns the .git directory.
             git config user.email "maqboolsubair181@gmail.com"
             git config user.name "maqboolsubair181"
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
