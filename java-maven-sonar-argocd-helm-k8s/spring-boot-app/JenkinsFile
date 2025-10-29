@@ -6,8 +6,8 @@ pipeline {
     }
   }
 
-  // DEFINITIVE FIX 1: Add this options block
   options {
+    // We still want to skip the initial, implicit checkout
     skipDefaultCheckout()
   }
 
@@ -15,18 +15,19 @@ pipeline {
 
     stage('Checkout') {
       steps {
-        // DEFINITIVE FIX 2: Explicitly check out the code INSIDE the container
-        checkout([$class: 'GitSCM',
-          branches: [[name: '*/main']],
-          userRemoteConfigs: [[url: 'https://github.com/maqboolsubair181/Jenkins-Zero-To-Hero.git']]
-        ])
-        sh 'echo "--- Code checked out successfully by user `whoami` ---"'
-        sh 'ls -la' // You will now see 'root root' as the owner of .git
+        // THE GUARANTEED FIX:
+        // Use a simple shell step to clone. This ensures 'git' runs
+        // INSIDE the container as the 'root' user.
+        sh 'git clone https://github.com/maqboolsubair181/Jenkins-Zero-To-Hero.git .'
+        
+        sh 'echo "--- Files cloned by user `whoami` ---"'
+        sh 'ls -la' // You will now see 'root root' as the owner of all files
       }
     }
 
     stage('Build and Test') {
       steps {
+        // The rest of the pipeline now works because the file ownership is correct
         dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
           sh 'mvn clean package -Dmaven.test.skip=true'
         }
@@ -70,7 +71,7 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # This will now work because 'git' is run by the same user ('root') who checked out the code.
+            # This will now succeed because the .git directory is owned by root.
             git config user.email "maqboolsubair181@gmail.com"
             git config user.name "maqboolsubair181"
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
