@@ -60,6 +60,7 @@ pipeline {
         // ✅ Removed checkout scm (redundant, repo already checked out)
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
+            cd ${WORKSPACE}
             git config user.email "maqboolsubair181@gmail.com"
             git config user.name "maqboolsubair181"
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
