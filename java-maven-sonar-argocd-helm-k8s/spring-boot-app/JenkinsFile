@@ -6,23 +6,27 @@ pipeline {
     }
   }
 
+  // DEFINITIVE FIX 1: Add this options block
+  options {
+    skipDefaultCheckout()
+  }
+
   stages {
 
     stage('Checkout') {
       steps {
+        // DEFINITIVE FIX 2: Explicitly check out the code INSIDE the container
         checkout([$class: 'GitSCM',
           branches: [[name: '*/main']],
           userRemoteConfigs: [[url: 'https://github.com/maqboolsubair181/Jenkins-Zero-To-Hero.git']]
         ])
-        sh 'echo "--- 1. Workspace content AFTER CHECKOUT ---"'
-        sh 'ls -la' // We EXPECT to see a .git directory here
+        sh 'echo "--- Code checked out successfully by user `whoami` ---"'
+        sh 'ls -la' // You will now see 'root root' as the owner of .git
       }
     }
 
     stage('Build and Test') {
       steps {
-        sh 'echo "--- 2. Workspace content BEFORE BUILD ---"'
-        sh 'ls -la' // Let's check if .git is still here
         dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
           sh 'mvn clean package -Dmaven.test.skip=true'
         }
@@ -34,8 +38,6 @@ pipeline {
         SONAR_URL = "http://54.153.141.9:9000"
       }
       steps {
-        sh 'echo "--- 3. Workspace content BEFORE SONAR ---"'
-        sh 'ls -la' // Is .git still here after the build?
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
           dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
             sh 'mvn sonar:sonar -Dsonar.login=$SONAR_AUTH_TOKEN -Dsonar.host.url=${SONAR_URL}'
@@ -49,8 +51,6 @@ pipeline {
         DOCKER_IMAGE = "maqboolsubair181/ultimate-cicd:${BUILD_NUMBER}"
       }
       steps {
-        sh 'echo "--- 4. Workspace content BEFORE DOCKER BUILD ---"'
-        sh 'ls -la' // Is .git still here after Sonar?
         script {
           dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
             docker.build("${DOCKER_IMAGE}", '.')
@@ -68,12 +68,9 @@ pipeline {
         GIT_USER_NAME = "maqboolsubair181"
       }
       steps {
-        sh 'echo "--- 5. Workspace content AT START OF FINAL STAGE ---"'
-        sh 'ls -la' // If .git is gone, it disappeared in the previous stage
-        
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # This command will fail if the .git directory is missing
+            # This will now work because 'git' is run by the same user ('root') who checked out the code.
             git config user.email "maqboolsubair181@gmail.com"
             git config user.name "maqboolsubair181"
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
